@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "com.nebula.deathcinema.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["ItemEntityMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

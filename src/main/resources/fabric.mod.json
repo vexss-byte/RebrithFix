@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "nebuladeath",
+  "version": "${version}",
+  "name": "Nebula Death Cinema",
+  "description": "Sinematik kematian, dunia nebula, dan respawn dari langit.",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.nebula.deathcinema.NebulaDeath"],
+    "client": ["com.nebula.deathcinema.client.NebulaClient"]
+  },
+  "mixins": ["nebuladeath.common.mixins.json", { "config": "nebuladeath.mixins.json", "environment": "client" }],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
