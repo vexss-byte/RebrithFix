@@ -48,8 +48,8 @@ public class NebulaDeath implements ModInitializer {
         ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, amount) -> {
             if (entity instanceof ServerPlayer p) {
                 // Totem: biarkan vanilla yang memprosesnya (totem dipakai, player selamat).
-                // /kill, void, dll (bypasses_resurrection) tetap menembus totem seperti vanilla.
-                if (!DeathManager.busy(p) && !source.is(DamageTypeTags.BYPASSES_RESURRECTION) && hasTotem(p)) return true;
+                // /kill, void, dll (bypasses_invulnerability) tetap menembus totem seperti vanilla.
+                if (!DeathManager.busy(p) && !source.is(DamageTypeTags.BYPASSES_INVULNERABILITY) && hasTotem(p)) return true;
                 DeathManager.onDeath(p);
                 return false;
             }
