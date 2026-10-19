@@ -12,7 +12,12 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import java.util.function.Predicate;
 
@@ -22,6 +27,14 @@ import static net.minecraft.commands.Commands.literal;
 public class NebulaDeath implements ModInitializer {
     /** Jika versi 26.3 mengubah API permission, cukup ubah baris ini. */
     static final Predicate<CommandSourceStack> OP = Commands.hasPermission(Commands.LEVEL_GAMEMASTERS);
+
+    static boolean hasTotem(ServerPlayer p) {
+        for (InteractionHand h : InteractionHand.values()) {
+            ItemStack st = p.getItemInHand(h);
+            if (st.is(Items.TOTEM_OF_UNDYING) || st.has(DataComponents.DEATH_PROTECTION)) return true;
+        }
+        return false;
+    }
 
     @Override
     public void onInitialize() {
@@ -33,7 +46,13 @@ public class NebulaDeath implements ModInitializer {
 
         // batalkan kematian vanilla -> pakai sinematik kita
         ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, amount) -> {
-            if (entity instanceof ServerPlayer p) { DeathManager.onDeath(p); return false; }
+            if (entity instanceof ServerPlayer p) {
+                // Totem: biarkan vanilla yang memprosesnya (totem dipakai, player selamat).
+                // /kill, void, dll (bypasses_resurrection) tetap menembus totem seperti vanilla.
+                if (!DeathManager.busy(p) && !source.is(DamageTypeTags.BYPASSES_RESURRECTION) && hasTotem(p)) return true;
+                DeathManager.onDeath(p);
+                return false;
+            }
             return true;
         });
 
