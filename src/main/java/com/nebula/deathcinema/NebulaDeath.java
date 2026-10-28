@@ -60,23 +60,26 @@ public class NebulaDeath implements ModInitializer {
         ServerPlayConnectionEvents.JOIN.register((h, sender, srv) -> DeathManager.onJoin(h.getPlayer()));
 
         CommandRegistrationCallback.EVENT.register((d, ctx, env) -> {
-            d.register(literal("matikan").requires(OP)
-                    .then(argument("nama_player", EntityArgument.player()).executes(c -> {
-                        ServerPlayer p = EntityArgument.getPlayer(c, "nama_player");
-                        if (DeathManager.busy(p)) { c.getSource().sendFailure(Component.literal("Player sedang dalam proses.")); return 0; }
-                        DeathManager.begin(p);
-                        c.getSource().sendSuccess(() -> Component.literal("§bNebula: " + p.getGameProfile().name() + " dimatikan."), true);
-                        return 1;
-                    })));
-
-            d.register(literal("hidupin").requires(OP)
-                    .then(argument("nama_player", EntityArgument.player()).executes(c -> {
-                        ServerPlayer p = EntityArgument.getPlayer(c, "nama_player");
-                        String err = DeathManager.revive(p);
-                        if (err != null) { c.getSource().sendFailure(Component.literal(err)); return 0; }
-                        c.getSource().sendSuccess(() -> Component.literal("§bNebula: " + p.getGameProfile().name() + " dihidupkan."), true);
-                        return 1;
-                    })));
+            // /lhc limbo revive <nama_player>  -> hidupkan player dari dunia nebula
+            // /lhc limbo banish <nama_player>  -> kirim player ke dunia nebula (mati)
+            d.register(literal("lhc")
+                    .then(literal("limbo").requires(OP)
+                            .then(literal("revive")
+                                    .then(argument("nama_player", EntityArgument.player()).executes(c -> {
+                                        ServerPlayer p = EntityArgument.getPlayer(c, "nama_player");
+                                        String err = DeathManager.revive(p);
+                                        if (err != null) { c.getSource().sendFailure(Component.literal(err)); return 0; }
+                                        c.getSource().sendSuccess(() -> Component.literal("§bNebula: " + p.getGameProfile().name() + " dihidupkan."), true);
+                                        return 1;
+                                    })))
+                            .then(literal("banish")
+                                    .then(argument("nama_player", EntityArgument.player()).executes(c -> {
+                                        ServerPlayer p = EntityArgument.getPlayer(c, "nama_player");
+                                        if (DeathManager.busy(p)) { c.getSource().sendFailure(Component.literal("Player sedang dalam proses.")); return 0; }
+                                        DeathManager.begin(p);
+                                        c.getSource().sendSuccess(() -> Component.literal("§bNebula: " + p.getGameProfile().name() + " dimatikan."), true);
+                                        return 1;
+                                    })))));
 
             d.register(literal("setwaktu").requires(OP)
                     .then(argument("minute", DoubleArgumentType.doubleArg(0.05, 1440)).executes(c -> {
