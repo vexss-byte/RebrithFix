@@ -18,6 +18,13 @@ public final class Fx {
     // biru muda, biru tua, ungu, putih, biru langit
     static final int[] COLORS = {0x8FE6FF, 0x1E3BFF, 0xA25CFF, 0xFFFFFF, 0x5AB4FF};
 
+    // ---- Ledakan saat masuk dunia nebula (ubah angka di sini kalau mau lebih sedikit / lebih banyak) ----
+    static final int BLAST_RODS = 44;        // bintang putih yang melesat keluar dari badan player
+    static final int BLAST_CORE_DUST = 18;   // percikan warna nebula tepat di sekitar badan
+    static final int BLAST_WAVE_TICKS = 7;   // berapa tick gelombang menyebar (20 tick = 1 detik)
+    static final int BLAST_WAVE_DUST = 9;    // jumlah percikan gelombang per tick
+    static final double BLAST_RADIUS = 2.8;  // seberapa jauh gelombang menyebar (blok)
+
     static void dust(ServerLevel l, double x, double y, double z, float size) {
         int c = COLORS[ThreadLocalRandom.current().nextInt(COLORS.length)];
         l.sendParticles(new DustParticleOptions(c, size), x, y, z, 1, 0, 0, 0, 0);
@@ -36,13 +43,6 @@ public final class Fx {
         return new double[]{s * Math.cos(a), z, s * Math.sin(a)};
     }
 
-    static void ring(ServerLevel l, double x, double y, double z, double r, int n, double phase, float size) {
-        for (int i = 0; i < n; i++) {
-            double a = phase + i * Math.PI * 2 / n;
-            dust(l, x + Math.cos(a) * r, y, z + Math.sin(a) * r, size);
-        }
-    }
-
     /** Ledakan dari dalam tubuh player. */
     public static void burst(ServerLevel l, double x, double y, double z) {
         var r = ThreadLocalRandom.current();
@@ -59,35 +59,51 @@ public final class Fx {
         sound(l, x, y, z, SoundEvents.BEACON_POWER_SELECT, 1.0f, 1.5f);
     }
 
-    /** Efek di dunia nebula. wt<0 = belum mulai; wt==0 = ledakan; lalu gelombang + circular beam bertahap. */
+    /** Efek di dunia nebula. wt<0 = belum mulai; wt==0 = ledakan dari badan player; lalu gelombang tipis menyebar. Setelah itu tidak ada partikel lagi. */
     public static void waitTick(ServerLevel l, double x, double y, double z, int wt) {
         if (wt < 0) return;
-        var r = ThreadLocalRandom.current();
-        if (wt == 0) burst(l, x, y + 1.0, z);
-        if (wt >= 1 && wt <= 10) { // shell ledakan mengembang
-            double rad = wt * 0.55;
-            for (int i = 0; i < 40; i++) {
-                double[] d = dir(r);
-                dust(l, x + d[0] * rad, y + 1 + d[1] * rad, z + d[2] * rad, 1.2f);
-            }
-        }
-        // 4 tahap circular beam: muncul lalu menghilang
-        for (int s = 0; s < 4; s++) {
-            int p = wt - 10 - s * 25;
-            if (p < 0 || p >= 40) continue;
-            double f = Math.sin(Math.PI * p / 40.0);
-            double rad = (0.8 + s * 0.45) * (0.3 + 0.7 * f);
-            if (p == 0) sound(l, x, y, z, SoundEvents.BEACON_POWER_SELECT, 1f, 0.8f + s * 0.2f);
-            ring(l, x, y + 0.1, z, rad, 30, wt * 0.15, 1.2f);
-            for (int k = 0; k < 8; k++) {
-                double a = k * Math.PI / 4 + wt * 0.1;
-                double h = f * 2.8 * r.nextDouble();
-                rod(l, x + Math.cos(a) * rad, y + 0.1 + h, z + Math.sin(a) * rad, 0, 0.02, 0, 0.02);
-                dust(l, x + Math.cos(a) * rad, y + 0.1 + h, z + Math.sin(a) * rad, 1.0f);
-            }
-        }
-        if (wt > 150 && wt % 10 == 0) ring(l, x, y + 0.1, z, 1.2, 10, wt * 0.1, 1.0f);
+        double cy = y + 0.9; // tengah badan player
+        if (wt == 0) blast(l, x, cy, z);
+        else if (wt <= BLAST_WAVE_TICKS) blastWave(l, x, cy, z, wt);
         if (wt > 150 && wt % 80 == 0) sound(l, x, y, z, SoundEvents.BEACON_AMBIENT, 0.8f, 1.0f);
+    }
+
+    /** Ledakan kecil dari tengah badan player: bintang melesat keluar ke sekeliling, lalu pudar sendiri dalam beberapa detik. */
+    static void blast(ServerLevel l, double x, double cy, double z) {
+        var r = ThreadLocalRandom.current();
+        for (int i = 0; i < BLAST_RODS; i++) {
+            double[] d = spread(r);
+            rod(l, x, cy, z, d[0], d[1], d[2], 0.14 + r.nextDouble() * 0.16);
+        }
+        for (int i = 0; i < BLAST_CORE_DUST; i++) {
+            double[] d = spread(r);
+            double rad = 0.9 + r.nextDouble() * 0.4;
+            dust(l, x + d[0] * rad, cy + d[1] * rad, z + d[2] * rad, 0.9f);
+        }
+        sound(l, x, cy, z, SoundEvents.BEACON_ACTIVATE, 1.5f, 1.2f);
+        sound(l, x, cy, z, SoundEvents.BEACON_POWER_SELECT, 1.0f, 1.5f);
+    }
+
+    /** Gelombang tipis yang menyebar keluar: cepat di awal, melambat di akhir (wt = 1..BLAST_WAVE_TICKS). */
+    static void blastWave(ServerLevel l, double x, double cy, double z, int wt) {
+        var r = ThreadLocalRandom.current();
+        double f = wt / (double) BLAST_WAVE_TICKS;
+        double rad = 0.9 + (BLAST_RADIUS - 0.9) * (1 - (1 - f) * (1 - f));
+        for (int i = 0; i < BLAST_WAVE_DUST; i++) {
+            double[] d = spread(r);
+            dust(l, x + d[0] * rad, cy + d[1] * rad, z + d[2] * rad, 0.8f);
+        }
+    }
+
+    /** Arah acak ke segala penjuru. Arah yang menembus lantai dibalik ke atas, dan arah tepat di atas kepala dijauhkan dari kamera. */
+    static double[] spread(ThreadLocalRandom r) {
+        double[] d = dir(r);
+        if (d[1] < -0.35) d[1] = -d[1];
+        if (d[1] > 0.8) {
+            double h = Math.hypot(d[0], d[2]), k = h < 1e-6 ? 0 : 0.6 / h;
+            d[0] *= k; d[2] *= k; d[1] = 0.8;
+        }
+        return d;
     }
 
     /** Spiral naik saat levitasi. */
