@@ -1,5 +1,6 @@
 package com.nebula.deathcinema;
 
+import net.minecraft.core.Holder;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
@@ -7,10 +8,14 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /** Partikel, suara, dan teks galaxy (server-side). */
@@ -36,6 +41,57 @@ public final class Fx {
 
     static void sound(ServerLevel l, double x, double y, double z, net.minecraft.sounds.SoundEvent s, float vol, float pitch) {
         l.playSound((Player) null, x, y, z, s, SoundSource.PLAYERS, vol, pitch);
+    }
+
+    // ---- Suara sinematik ----
+    private static final Map<String, SoundEvent> SOUNDS = new HashMap<>();
+
+    /** Cari SoundEvents.NAMA lewat namanya. Aman kalau nama itu tidak ada / bertipe Holder di versi Minecraft ini: suara dilewati, tidak error. */
+    static SoundEvent soundByName(String name) {
+        if (SOUNDS.containsKey(name)) return SOUNDS.get(name);
+        SoundEvent found = null;
+        try {
+            Object o = SoundEvents.class.getField(name).get(null);
+            if (o instanceof Holder<?> h) o = h.value();
+            if (o instanceof SoundEvent se) found = se;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // dibiarkan: found tetap null
+        }
+        if (found == null) System.err.println("[NebulaDeath] SoundEvents." + name + " tidak ditemukan, suara dilewati");
+        SOUNDS.put(name, found);
+        return found;
+    }
+
+    /** Putar suara bawaan Minecraft berdasarkan namanya di SoundEvents. */
+    static void play(ServerLevel l, double x, double y, double z, String name, float vol, float pitch) {
+        SoundEvent s = soundByName(name);
+        if (s != null) sound(l, x, y, z, s, vol, pitch);
+    }
+
+    /** Satu suara dalam rangkaian kematian: dimainkan pada tick ke-[tick] fase DYING (1 tick = 0,05 detik). */
+    record Cue(int tick, String sound, float vol, float pitch) {}
+
+    /**
+     * Rangkaian suara saat mati, mengikuti animasi kamera: jatuh tick 0-34, menyentuh tanah ~34,
+     * kelopak mata menutup 40-98, lalu pindah ke dunia nebula di tick 110.
+     * Kolom: tick, nama suara (SoundEvents.NAMA), volume, pitch (0.5 = berat/dalam, 2.0 = tinggi).
+     */
+    static final List<Cue> DYING_CUES = List.of(
+            new Cue(1, "BEACON_DEACTIVATE", 1.2f, 0.70f),      // nyawa "dimatikan"
+            new Cue(3, "WARDEN_HEARTBEAT", 1.0f, 1.00f),       // detak jantung 1
+            new Cue(12, "PHANTOM_SWOOP", 0.7f, 0.55f),         // desir angin saat tubuh jatuh
+            new Cue(15, "WARDEN_HEARTBEAT", 1.0f, 0.85f),      // detak 2, melambat
+            new Cue(27, "WARDEN_HEARTBEAT", 1.0f, 0.70f),      // detak 3
+            new Cue(34, "PLAYER_BIG_FALL", 1.0f, 0.60f),       // badan menghantam tanah
+            new Cue(34, "WARDEN_HEARTBEAT", 1.3f, 0.55f),      // dentum berat
+            new Cue(46, "ELDER_GUARDIAN_CURSE", 0.5f, 0.80f),  // rintihan saat mata menutup
+            new Cue(62, "WARDEN_HEARTBEAT", 0.9f, 0.50f),      // detak terakhir
+            new Cue(84, "BEACON_DEACTIVATE", 1.0f, 0.50f),     // semuanya padam
+            new Cue(104, "ENDERMAN_TELEPORT", 1.0f, 0.55f));   // menghilang ke dunia nebula
+
+    /** Dipanggil tiap tick fase DYING (tick mulai dari 1): memutar suara yang jadwalnya pas. */
+    public static void dyingTick(ServerLevel l, double x, double y, double z, int tick) {
+        for (Cue c : DYING_CUES) if (c.tick() == tick) play(l, x, y + 0.9, z, c.sound(), c.vol(), c.pitch());
     }
 
     static double[] dir(ThreadLocalRandom r) {
@@ -82,6 +138,7 @@ public final class Fx {
         }
         sound(l, x, cy, z, SoundEvents.BEACON_ACTIVATE, 1.5f, 1.2f);
         sound(l, x, cy, z, SoundEvents.BEACON_POWER_SELECT, 1.0f, 1.5f);
+        play(l, x, cy, z, "AMETHYST_BLOCK_RESONATE", 1.2f, 0.8f);
     }
 
     /** Gelombang tipis yang menyebar keluar: cepat di awal, melambat di akhir (wt = 1..BLAST_WAVE_TICKS). */

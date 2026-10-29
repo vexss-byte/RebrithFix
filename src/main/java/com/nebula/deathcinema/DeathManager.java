@@ -38,7 +38,8 @@ public final class DeathManager {
         boolean resist;
     }
 
-    record TestShow(ServerLevel l, double x, double y, double z, int[] t) {}
+    /** fall=true: tes /tesjatuh (suara kematian); fall=false: tes /tespartikel (ledakan nebula). */
+    record TestShow(ServerLevel l, double x, double y, double z, int[] t, boolean fall) {}
 
     public static MinecraftServer server;
     static final Map<UUID, Session> S = new HashMap<>();
@@ -116,8 +117,13 @@ public final class DeathManager {
         }
         for (Iterator<TestShow> it = tests.values().iterator(); it.hasNext(); ) {
             TestShow t = it.next();
-            Fx.waitTick(t.l(), t.x(), t.y(), t.z(), t.t()[0]++);
-            if (t.t()[0] > 220) it.remove();
+            if (t.fall()) {
+                Fx.dyingTick(t.l(), t.x(), t.y(), t.z(), ++t.t()[0]);
+                if (t.t()[0] >= DYING_TICKS) it.remove();
+            } else {
+                Fx.waitTick(t.l(), t.x(), t.y(), t.z(), t.t()[0]++);
+                if (t.t()[0] > 220) it.remove();
+            }
         }
     }
 
@@ -128,6 +134,7 @@ public final class DeathManager {
             case DYING -> {
                 freeze(p, s, true);
                 heal(p);
+                Fx.dyingTick(lvl, p.getX(), p.getY(), p.getZ(), s.tick);
                 if (s.tick >= DYING_TICKS) toWait(p, s);
             }
             case WAIT -> {
@@ -167,6 +174,7 @@ public final class DeathManager {
         ServerLevel lvl = findLevel(c.dim);
         p.setNoGravity(false);
         p.teleportTo(lvl, c.x, c.y, c.z, Set.<Relative>of(), c.yaw, c.pitch, true);
+        Fx.play(lvl, c.x, c.y + 0.9, c.z, "ENDERMAN_TELEPORT", 0.9f, 0.8f); // tiba di dunia nebula
         p.setGameMode(GameType.ADVENTURE);
         s.phase = Phase.WAIT;
         s.tick = 0;
@@ -266,7 +274,13 @@ public final class DeathManager {
     }
 
     public static void testParticles(ServerPlayer p) {
-        tests.put(p.getUUID(), new TestShow((ServerLevel) p.level(), p.getX(), p.getY(), p.getZ(), new int[]{0}));
+        tests.put(p.getUUID(), new TestShow((ServerLevel) p.level(), p.getX(), p.getY(), p.getZ(), new int[]{0}, false));
+    }
+
+    /** /tesjatuh: kamera jatuh + tangan turun (client) dan suara kematian (server), tanpa benar-benar mati. */
+    public static void testFall(ServerPlayer p) {
+        send(p, 1);
+        tests.put(p.getUUID(), new TestShow((ServerLevel) p.level(), p.getX(), p.getY(), p.getZ(), new int[]{0}, true));
     }
 
     // ---------- disconnect / join ----------

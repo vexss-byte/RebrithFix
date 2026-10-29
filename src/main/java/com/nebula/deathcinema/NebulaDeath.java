@@ -117,8 +117,8 @@ public class NebulaDeath implements ModInitializer {
                 return 1;
             }));
 
-            d.register(literal("tesjatuh").requires(OP).executes(c -> { // tes kamera jatuh ke kanan (tanpa mati)
-                DeathManager.send(c.getSource().getPlayerOrException(), 1);
+            d.register(literal("tesjatuh").requires(OP).executes(c -> { // tes kamera jatuh + tangan turun + suara (tanpa mati)
+                DeathManager.testFall(c.getSource().getPlayerOrException());
                 return 1;
             }));
 
