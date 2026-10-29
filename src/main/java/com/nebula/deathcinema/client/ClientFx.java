@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec3;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -138,6 +139,83 @@ public final class ClientFx {
         if (radius < 1) return null;
         int passes = 1 + (amt > 0.6 ? 1 : 0) + (amt > 0.9 ? 1 : 0);
         return new int[]{radius, passes};
+    }
+
+    // ---------- tangan first-person turun perlahan saat jatuh ----------
+    /** Seberapa jauh tangan "diayun" ke bawah (derajat x 10): 700 = tangan berputar ±70° ke bawah, cukup untuk keluar dari layar. Perbesar kalau FOV kamu sangat lebar. */
+    static final double HAND_SWAY = 700;
+
+    static Field xBobF, xBobOF;
+    static boolean handInit, handOk, madeInvisible;
+    static float lastSway = Float.NaN;
+
+    /** 0 = tangan normal, 1 = tangan sudah turun sepenuhnya keluar layar. */
+    static double handDrop() {
+        double t = t();
+        return switch (mode) {
+            case 1 -> smooth((t - 2) / 34.0);        // mulai turun begitu mau jatuh, hilang total sebelum badan menyentuh tanah (~tick 36)
+            case 2 -> 1 - smooth((t - 44) / 30.0);   // setelah bangun di dunia nebula, tangan naik lagi pelan-pelan
+            default -> 0.0;
+        };
+    }
+
+    /** Cari field float (termasuk di superclass) lewat namanya, atau null kalau tidak ada. */
+    static Field floatField(Class<?> c, String name) {
+        for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+            try {
+                Field f = k.getDeclaredField(name);
+                if (f.getType() != float.class) return null;
+                f.setAccessible(true);
+                return f;
+            } catch (NoSuchFieldException ignored) {
+                // coba superclass
+            } catch (RuntimeException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Dipanggil tiap tick client. Tangan diturunkan lewat "ayunan lengan" bawaan Minecraft
+     * (xBob/xBobO yang dipakai ItemInHandRenderer: tangan berputar (pitch - xBob) * 0.1 derajat).
+     * Memakai refleksi supaya build tidak error kalau nama field berbeda di versi Minecraft lain.
+     */
+    public static void handTick(Minecraft mc) {
+        LocalPlayer p = mc.player;
+        if (p == null) { lastSway = Float.NaN; madeInvisible = false; return; }
+        update();
+        double h = handDrop();
+        if (h <= 0.0005) {                       // tidak sedang animasi: serahkan ke Minecraft
+            lastSway = Float.NaN;
+            if (madeInvisible) { p.setInvisible(false); madeInvisible = false; }
+            return;
+        }
+        if (!handInit) {
+            handInit = true;
+            xBobF = floatField(LocalPlayer.class, "xBob");
+            xBobOF = floatField(LocalPlayer.class, "xBobO");
+            handOk = xBobF != null;
+            if (!handOk) System.err.println("[NebulaDeath] field xBob tidak ditemukan: tangan hanya disembunyikan, tanpa animasi turun");
+        }
+        if (handOk) {
+            try {
+                float target = (float) (p.getXRot() + HAND_SWAY * h);
+                float prev = Float.isNaN(lastSway) ? xBobF.getFloat(p) : lastSway;
+                if (xBobOF != null) xBobOF.setFloat(p, prev);
+                xBobF.setFloat(p, target);
+                lastSway = target;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                handOk = false;
+            }
+        }
+        // Pengaman: begitu tangan turun penuh, lengan disembunyikan di sisi client saja (player lain tidak terpengaruh)
+        if (h >= 0.999) {
+            if (!p.isInvisible()) { p.setInvisible(true); madeInvisible = true; }
+        } else if (madeInvisible) {
+            p.setInvisible(false);
+            madeInvisible = false;
+        }
     }
 
     static int argb(double a, int rgb) { return ((int) (clamp(a) * 255) << 24) | rgb; }

@@ -2,6 +2,7 @@ package com.nebula.deathcinema.client;
 
 import com.nebula.deathcinema.FxPayload;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.minecraft.client.Minecraft;
@@ -11,6 +12,7 @@ public class NebulaClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ClientPlayNetworking.registerGlobalReceiver(FxPayload.TYPE, (payload, ctx) -> ClientFx.start(payload.id()));
+        ClientTickEvents.END_CLIENT_TICK.register(ClientFx::handTick); // tangan turun perlahan saat jatuh
 
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("nebuladeath", "fx"), (graphics, tickCounter) -> {
             Minecraft mc = Minecraft.getInstance();
